@@ -91,29 +91,50 @@ const fundraiserSchema = new mongoose.Schema({
 });
 const Fundraiser = mongoose.model("Fundraiser", fundraiserSchema);
 
-// Create Fundraiser
-// Create Campaign (instead of storing in Fundraiser, it now stores in Campaign)
 app.post("/api/campaigns", authMiddleWare, async (req, res) => {
     const { title, description, goalAmount } = req.body;
-    const creatorId = req.user.id; // Get creatorId from JWT
+  
+    if (!title || typeof title !== 'string' || title.trim().length < 3) {
+      return res.status(400).json({ message: "Title is required and should be at least 3 characters long" });
+    }
+  
+    if (!description || typeof description !== 'string' || description.trim().length < 10) {
+      return res.status(400).json({ message: "Description is required and should be at least 10 characters long" });
+    }
+  
+    if (!goalAmount || typeof goalAmount !== 'number' || goalAmount <= 0) {
+      return res.status(400).json({ message: "Goal amount must be a positive number" });
+    }
+  
+    const creatorId = req.user?.id; 
+    if (!creatorId) {
+      return res.status(401).json({ message: "Unauthorized: Invalid user" });
+    }
   
     const newCampaign = new Campaign({
       id: uuidv4(),
       title,
       description,
       goalAmount,
-      currentAmount: 0, // Initialize current amount as 0
+      currentAmount: 0,
       creatorId,
     });
   
     try {
       await newCampaign.save();
-      res.status(201).json(newCampaign);
+      res.status(201).json({
+        id: newCampaign.id,
+        title: newCampaign.title,
+        description: newCampaign.description,
+        goalAmount: newCampaign.goalAmount,
+        currentAmount: newCampaign.currentAmount,
+      });
     } catch (err) {
-      console.error(err); // Log error for debugging
-      res.status(500).json({ message: "Error saving campaign" });
+      console.error("Error saving campaign:", err.message, err.stack);
+      res.status(500).json({ message: "Internal Server Error" });
     }
   });
+  
   
 
 // Get all campaigns
@@ -139,6 +160,48 @@ app.get("/api/campaigns/:id", async (req, res) => {
     res.status(500).json({ message: "Error in fetching campaign" });
   }
 });
+
+// Auth middleware for validating JWT token
+const authenticateToken = (req, res, next) => {
+    const token = req.headers['authorization']?.split(' ')[1]; // Get the token from the Authorization header
+    
+    if (!token) {
+      return res.status(401).json({ message: "Token is required" });
+    }
+  
+    jwt.verify(token, "secret_key", (err, user) => {
+      if (err) {
+        return res.status(403).json({ message: "Invalid token" });
+      }
+      req.user = user;
+      next(); // Proceed to the next middleware/route handler
+    });
+  };
+  
+  // User profile route to fetch user data
+  app.get('/user-profile', authenticateToken, (req, res) => {
+    const userId = req.user.id; // Extract user ID from the decoded JWT
+  
+    User.findOne({ id: userId })
+      .then(user => {
+        if (!user) {
+          return res.status(404).json({ message: "User not found" });
+        }
+  
+        // Sending user data excluding sensitive information
+        res.json({
+          name: user.name,
+          email: user.email,
+          phone: user.phone, // Assuming phone is stored in the database
+          fundsDonated: user.fundsDonated, // Assuming this field exists
+          fundraisersCreated: user.fundraisersCreated // Assuming this field exists
+        });
+      })
+      .catch(err => {
+        res.status(500).json({ message: 'Error fetching user data' });
+      });
+  });
+  
 
 // Update campaign
 app.put("/api/campaigns/:id", authMiddleWare, async (req, res) => {
