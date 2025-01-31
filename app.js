@@ -92,27 +92,29 @@ const fundraiserSchema = new mongoose.Schema({
 const Fundraiser = mongoose.model("Fundraiser", fundraiserSchema);
 
 // Create Fundraiser
+// Create Campaign (instead of storing in Fundraiser, it now stores in Campaign)
 app.post("/api/campaigns", authMiddleWare, async (req, res) => {
-  const { title, description, category, fundsReq, collected } = req.body;
-  const creatorId = req.user.id; // Get creatorId from JWT
-
-  const newFundraiser = new Fundraiser({
-    title,
-    description,
-    category,
-    fundsReq,
-    collected,
-    creatorId,
+    const { title, description, goalAmount } = req.body;
+    const creatorId = req.user.id; // Get creatorId from JWT
+  
+    const newCampaign = new Campaign({
+      id: uuidv4(),
+      title,
+      description,
+      goalAmount,
+      currentAmount: 0, // Initialize current amount as 0
+      creatorId,
+    });
+  
+    try {
+      await newCampaign.save();
+      res.status(201).json(newCampaign);
+    } catch (err) {
+      console.error(err); // Log error for debugging
+      res.status(500).json({ message: "Error saving campaign" });
+    }
   });
-
-  try {
-    await newFundraiser.save();
-    res.status(201).json(newFundraiser);
-  } catch (err) {
-    console.error(err); // Log error for debugging
-    res.status(500).json({ message: "Error saving fundraiser" });
-  }
-});
+  
 
 // Get all campaigns
 app.get("/api/campaigns", async (req, res) => {
